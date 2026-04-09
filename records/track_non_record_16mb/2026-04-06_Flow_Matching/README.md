@@ -42,17 +42,15 @@ At each training step:
 ## Metrics
 
 - **Training loss** is the sum of MSE velocity loss and CE anchor loss — not directly comparable to the baseline cross-entropy.
-- **val_bpb** is a variational upper bound on bits-per-byte obtained by averaging CE(`z1_hat`, target) over `VAR_EVAL_STEPS` evenly spaced timesteps, then converting nats/token → bits/byte using the tokenizer's tokens-per-byte ratio. This is **not apples-to-apples** with the autoregressive baseline BPB for the same reason as masked diffusion models: there is no exact autoregressive factorization, so the variational Monte Carlo estimate is an upper bound.
+- **val_bpb** is a Monte Carlo estimate of average CE over noise levels, converted to bits/byte. It is **not apples-to-apples** with the autoregressive baseline BPB.
 
-## Variational BPB
+## val_bpb Computation
 
-The val_bpb reported here follows the same logic as the MDLM submission's variational metric:
-
-- For each of `VAR_EVAL_STEPS` evenly spaced `t ∈ [0, 1]`, independently sample noise and compute the forward-noised input.
-- Run the transformer to get `v_pred`, estimate `z1_hat`, and compute token CE.
-- Average CE across timesteps → nats/token → bits/byte via `tokens_per_byte`.
-
-This is an upper bound, not an exact codelength. More steps → tighter bound. At `VAR_EVAL_STEPS=32`, it provides a reasonable estimate at acceptable eval cost (~2 min on 8×H100 NVL).
+For each of `VAR_EVAL_STEPS=32` evenly spaced `t ∈ [0, 1]`:
+1. Sample noise, compute the linearly interpolated `x_t`.
+2. Run the transformer to get `v_pred`, estimate `z1_hat = x_t + (1-t)*v_pred`.
+3. Compute token CE between `z1_hat` projected through the embedding matrix and the target.
+4. Average CE across timesteps → nats/token → bits/byte via `tokens_per_byte`.
 
 ## Things That Didn't Work / Notes
 
